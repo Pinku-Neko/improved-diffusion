@@ -459,7 +459,7 @@ class UNetModel(nn.Module):
         """
         return next(self.input_blocks.parameters()).dtype
 
-    def forward(self, x, timesteps, y=None):
+    def forward(self, x, timesteps=None, y=None):
         """
         Apply the model to an input batch.
 
@@ -473,17 +473,21 @@ class UNetModel(nn.Module):
         ), "must specify y if and only if the model is class-conditional"
 
         hs = []
-        emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
-
+        if (timesteps is None):
+            dummy = th.zeros((len(x),)).to(device=x.device)
+            emb = self.time_embed(timestep_embedding(dummy, self.model_channels))*0
+        else:
+            emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
         if self.num_classes is not None:
             assert y.shape == (x.shape[0],)
             emb = emb + self.label_emb(y)
-
         h = x.type(self.inner_dtype)
         for module in self.input_blocks:
             h = module(h, emb)
             hs.append(h)
         h = self.middle_block(h, emb)
+        if (timesteps is None):
+            return h
         for module in self.output_blocks:
             cat_in = th.cat([h, hs.pop()], dim=1)
             h = module(cat_in, emb)

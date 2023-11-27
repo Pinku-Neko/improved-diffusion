@@ -35,6 +35,31 @@ def model_and_diffusion_defaults():
     )
 
 
+
+def diffusion_and_regression_defaults():
+    """
+    Defaults for image training regression.
+    """
+    return dict(
+        diffusion_steps=1000,
+        learn_sigma=False,
+        sigma_small=False,
+        noise_schedule="linear",
+        use_kl=False,
+        predict_xstart=False,
+        rescale_timesteps=True,
+        rescale_learned_sigmas=True,
+        timestep_respacing="",
+        hidden_dim=128
+    )
+def regression_defaults():
+    '''
+    Defaults for regression model.
+    '''
+    return dict(
+        hidden_dim=128
+    )
+
 def create_model_and_diffusion(
     image_size,
     class_cond,
@@ -81,6 +106,34 @@ def create_model_and_diffusion(
         timestep_respacing=timestep_respacing,
     )
     return model, diffusion
+
+def create_diffusion_regrression(
+        diffusion_steps,
+        learn_sigma,
+        sigma_small,
+        noise_schedule,
+        use_kl,
+        predict_xstart,
+        rescale_timesteps,
+        rescale_learned_sigmas,
+        timestep_respacing,
+        hidden_dim
+):
+    diffusion = create_gaussian_diffusion(
+        steps=diffusion_steps,
+        learn_sigma=learn_sigma,
+        sigma_small=sigma_small,
+        noise_schedule=noise_schedule,
+        use_kl=use_kl,
+        predict_xstart=predict_xstart,
+        rescale_timesteps=rescale_timesteps,
+        rescale_learned_sigmas=rescale_learned_sigmas,
+        timestep_respacing=timestep_respacing,
+    )
+    regression = create_regression(
+        hidden_dim=hidden_dim
+    )
+    return diffusion,regression
 
 
 def create_model(
@@ -267,6 +320,10 @@ def create_gaussian_diffusion(
         rescale_timesteps=rescale_timesteps,
     )
 
+
+def create_regression(hidden_dim):
+    from .regression import Advanced_Regression
+    return Advanced_Regression(hidden_dim=hidden_dim)
 
 def add_dict_to_argparser(parser, default_dict):
     for k, v in default_dict.items():

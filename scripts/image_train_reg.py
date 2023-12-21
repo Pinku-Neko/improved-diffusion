@@ -11,7 +11,7 @@ from improved_diffusion.script_util import (
     args_to_dict,
     add_dict_to_argparser
     )
-from improved_diffusion.train_reg import TrainLoop
+from improved_diffusion.reg_train import TrainLoop
 
 def main():
     args = create_argparser().parse_args()
@@ -37,7 +37,8 @@ def main():
         data=data,
         batch_size=args.batch_size,
         lr=args.lr,
-        epochs=args.epochs
+        epochs=args.epochs,
+        resume_checkpoint = args.resume_checkpoint,
     ).run_loop()
 
 
@@ -50,7 +51,7 @@ def create_argparser():
         epochs = 1000,
         # log_interval=10,
         # save_interval=10000,
-        # resume_checkpoint="",
+        resume_checkpoint="",
         use_fp16=False
     )
     defaults.update(diffusion_and_regression_defaults())

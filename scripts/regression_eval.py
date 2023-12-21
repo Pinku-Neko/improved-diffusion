@@ -28,7 +28,8 @@ def main():
         data_dir=args.data_dir,
         num_samples=args.num_samples,
         image_size=args.image_size,
-        regression_path = "reg_128_L1_best.pt"
+        regression_path = args.regression_path,
+        clamp=args.clamp
     ).plot_sample()
 
 
@@ -36,7 +37,9 @@ def create_argparser():
     defaults = dict(
         data_dir="cifar_test",
         image_size=32,
-        num_samples=4
+        num_samples=4,
+        regression_path = "reg_128_L2_best.pt",
+        clamp=False
     )
     defaults.update(diffusion_and_regression_defaults())
     parser = argparse.ArgumentParser()

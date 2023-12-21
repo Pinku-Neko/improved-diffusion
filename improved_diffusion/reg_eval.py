@@ -36,7 +36,8 @@ class Evaluate:
         data_dir,
         num_samples,
         image_size,
-        regression_path=None
+        regression_path=None,
+        clamp=False
     ):
         if th.cuda.is_available():
             self.device = 'cuda'
@@ -47,8 +48,9 @@ class Evaluate:
 
         self.data_dir = data_dir
         self.diffusion = diffusion
-        self.num_samples = num_samples
 
+        self.num_samples = num_samples
+        self.clamp = clamp
         self.timesteps = 1000  # TODO fix this later
         self.transform = transforms.Compose([
             transforms.Resize((image_size, image_size)),
@@ -90,6 +92,10 @@ class Evaluate:
             # calculate noise
             noise_batch = self.diffusion.q_sample(
                 image_tensors, time).to(device=self.device)
+            
+            # clamp the image to realistic values if specified
+            if self.clamp:
+                noise_batch = th.clamp(noise_batch,-1,1)
 
             # pass to model
             with th.no_grad():

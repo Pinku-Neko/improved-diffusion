@@ -2,3 +2,6 @@
 __pycache__/
 cifar_train/
 cifar_test/
+plots/
+models/
+samples/

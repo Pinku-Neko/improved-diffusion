@@ -42,7 +42,8 @@ def main():
     )
 
     # test unet
-    Sampler.test_model()
+    # Sampler.test_model()
+    Sampler.sample_images(num_samples=args.num_samples)
 
     # Sampler.sample_plot()
 
@@ -54,6 +55,7 @@ def create_argparser():
         clamp=False,
         batch_size = 16,
         stop_at = 0.8,
+        num_samples = 16
     )
     defaults.update(model_and_diffusion_defaults())
     defaults.update(regression_defaults())

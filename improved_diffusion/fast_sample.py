@@ -28,6 +28,9 @@ class FastSample:
         self.regression.eval()
         self.timesteps=timesteps
         self.tolerance=tolerance
+        self.batch_size=batch_size
+        self.channels=channels
+        self.image_size=image_size
         self.stop_at=stop_at
 
         # for images
@@ -46,68 +49,80 @@ class FastSample:
         # record all repititions
         self.total_rep = 0
         # init t with last timestep (timesteps-1)
-        self.true_t = self.timesteps-1
-        while self.true_t != 0:
-            if self.true_t >= self.timesteps*self.stop_at:
-                x = self.step(x)
-            else:
+        true_t = th.tensor([self.timesteps-1]*x.shape[0],dtype=th.int32,device=self.device)
+        threshold = self.timesteps*self.stop_at
+        while any(true_t!=0):
+            predict_required = th.logical_and(true_t>threshold,true_t != 0)
+            predict_not_required = th.logical_and(true_t<=threshold,true_t != 0)
+            fast_x = x[predict_required]
+            fast_t = true_t[predict_required]
+            normal_x = x[predict_not_required]
+            normal_t = true_t[predict_not_required]
+            if len(fast_t) != 0:
+                x[predict_required],true_t[predict_required] = self.step(fast_x,fast_t)
+            if len(normal_t) != 0:
                 with th.no_grad():
-                    t = th.tensor([self.true_t],device=self.device)
-                    x = self.diffusion.p_sample(self.unet,x,t)['sample']
-                    self.true_t -= 1
-                    if self.true_t % 100 == 0:
-                        print(self.true_t)
+                    x[predict_not_required] = self.diffusion.p_sample(self.unet,normal_x,normal_t)['sample']
+                    true_t[predict_not_required] -= 1
+                    # print(true_t)
         # last step, just return p_sample
         last_t = th.zeros(size=(self.image_shape[0],),dtype=th.int32,device=self.device)
         return self.diffusion.p_sample(self.unet,x,last_t)['sample']
 
-    def step(self, x):
+    def step(self, x, t):
         # print current t
-        print(f"timestep {self.true_t}")
+        # print(f"predict {t}")
         # sample from diffusion
-        current_t = th.tensor([self.true_t],device=self.device)
         # predict the timestep using 
         with th.no_grad():
-            x_next = self.diffusion.p_sample(self.unet,x,current_t)['sample']
-            t_pred = th.round(self.regression(x_next) * self.timesteps).to(dtype=th.int32)
+            x_next = self.diffusion.p_sample(self.unet,x,t)['sample']
+            t_pred = th.round(self.regression(x_next) * self.timesteps).to(dtype=th.int32).squeeze(1)
         # repeat for certain number of times
         repitition = 0
         while repitition<self.tolerance:
             # if sampled image has lower predict than true t
-            if t_pred.item() < self.true_t:
+            # import pdb;pdb.set_trace()
+            if all(t_pred < t):
                 # use the image and use the predict t as true t
-                self.true_t = t_pred.item()
-                return x_next
+                return x_next, t_pred
             # repeat process until too much
             repitition += 1
             self.total_rep += 1
             # sample from diffusion
-            current_t = th.tensor([self.true_t],device=self.device)
             # predict the timestep using regression
             with th.no_grad():
-                x_next = self.diffusion.p_sample(self.unet,x,current_t)['sample']
-                t_pred = th.round(self.regression(x_next) * self.timesteps).to(dtype=th.int32)
+                x_next = self.diffusion.p_sample(self.unet,x,t)['sample']
+                t_pred = th.round(self.regression(x_next) * self.timesteps).to(dtype=th.int32).squeeze(1)
         # force go down by returning newest x_next
         # one could compare differently generated x_next and return best
-        self.true_t -= 1
-        return x_next
+        return x_next, t-1
+
 
     def sample_images(self, num_samples):
         from tqdm.auto import tqdm
+        from datetime import datetime
+        import numpy as np
         batches = []
         # just make enough batches
-        num_batches = num_samples // self.batch_size + 1
-        for i in tqdm(range(num_batches)):
-            noise = th.randn(self.image_shape)
+        num_batches = int(np.ceil(num_samples / self.batch_size))
+        progress_bar = tqdm(range(num_batches))
+        for i in progress_bar:
+            noise = th.randn(self.image_shape,device=self.device)
             batch = self.forward(noise)
             batches.append(batch)
-        batched = th.concatenate()
-
+        batches = th.concatenate(batches)
+        images = self.reverse_transform(batches[:num_samples]).cpu().numpy()
+        now = datetime.now()
+        timestamp = str(now.strftime("%Y%m%d_%H%M%S"))
+        np.savez(f"./samples/samples_{timestamp}_{len(images)}.npz",images)
+        print("Sampling complete!")
 
     def sample_plot(self):
         import matplotlib.pyplot as plt
         noise = th.randn(*self.image_shape,device=self.device)
         sample = self.forward(noise)
+        if self.image_shape[0] > 1:
+            sample = sample[0].unsqueeze(0)
         image = self.reverse_transform(sample)[0].cpu().numpy()
         plt.imshow(image)
         plt.show()
@@ -118,6 +133,8 @@ class FastSample:
         noise = th.randn(*self.image_shape,device=self.device)
         # fast sample
         fast_sample = self.forward(noise)
+        if self.image_shape[0] > 1:
+            fast_sample = fast_sample[0].unsqueeze(0)
         fast_sample_image = self.reverse_transform(fast_sample)[0].cpu().numpy()
         # normal sample
         normal_sample = self.diffusion.p_sample_loop(
@@ -126,6 +143,8 @@ class FastSample:
             noise=noise,
             progress=True
         )
+        if self.image_shape[0] > 1:
+            normal_sample = normal_sample[0].unsqueeze(0)
         normal_sample_image = self.reverse_transform(normal_sample).cpu().numpy().squeeze()
         # subplot
         fig, axs = plt.subplots(1, 2)

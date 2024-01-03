@@ -92,10 +92,10 @@ class Evaluate:
             # calculate noise
             noise_batch = self.diffusion.q_sample(
                 image_tensors, time).to(device=self.device)
-            
+
             # clamp the image to realistic values if specified
             if self.clamp:
-                noise_batch = th.clamp(noise_batch,-1,1)
+                noise_batch = th.clamp(noise_batch, -1, 1)
 
             # pass to model
             with th.no_grad():
@@ -112,42 +112,45 @@ class Evaluate:
 
         title_predict = f'Predict of Regression.'
         identity = range(self.timesteps)
-        self.plot(plot=plt,title=title_predict, array_1=predicts, array_2=identity)
+        self.plot(plot=plt, title=title_predict,
+                  array_1=predicts, array_2=identity)
         plt.show()
 
         title_error = f'Error of Regression.'
         zeroes = [0]*self.timesteps
-        self.plot(plot=plt,title=title_error,array_1=diffs,array_2=zeroes)
+        self.plot(plot=plt, title=title_error, array_1=diffs, array_2=zeroes)
         plt.show()
 
         title_abs_error = f'Absolute Error of Regression.'
-        self.plot(plot=plt,title=title_abs_error,array_1=diffs_abs)
+        self.plot(plot=plt, title=title_abs_error, array_1=diffs_abs)
         plt.show()
+        plt.savefig()
 
         self.subplot(titles=[title_predict, title_error, title_abs_error],
-                     arrays_1= [predicts, diffs, diffs_abs],
-                     arrays_2= [identity,zeroes,None])
-        
-    def plot(self,plot, title, array_1, array_2 = None):
+                     arrays_1=[predicts, diffs, diffs_abs],
+                     arrays_2=[identity, zeroes, None])
+
+    def plot(self, plot, title, array_1, array_2=None):
         x_values = range(self.timesteps)
         plot.plot(x_values, array_1[:, 0],
-                 label='Average', color='black', zorder=5)
+                  label='Average', color='black', zorder=5)
         plot.errorbar(x=x_values, y=array_1[:, 0], yerr=array_1[:, 1],
-                     label='Standard Deviation', fmt='o', markersize=0.3, color='blue', zorder=0)
+                      label='Standard Deviation', fmt='o', markersize=0.3, color='blue', zorder=0)
         if array_2 is not None:
-            plot.plot(x_values, array_2,color='green')
+            plot.plot(x_values, array_2, label='Ground Truth', color='green')
             # calculate crossings
             crossings = find_crossings(array_2, array_1[:, 0])
-            plot.scatter(crossings[:, 0], crossings[:, 1],label = "Crossing", color='red', zorder=10)
+            plot.scatter(crossings[:, 0], crossings[:, 1],
+                         label="Crossing", color='red', zorder=10)
 
         # plot
         if plot is plt:
             plot.xlabel('Timestep')
             plot.ylabel('Error in timestep')
             sample_msg = f' Sample size:{self.num_samples}'
-            plot.title(f'{title} {sample_msg}',fontsize=16)
+            plot.title(f'{title} {sample_msg}', fontsize=16)
         else:
-            plot.set_title(title,fontsize=12)
+            plot.set_title(title, fontsize=12)
         plot.legend()
         plot.grid(True)
 
@@ -155,7 +158,8 @@ class Evaluate:
         fig, axs = plt.subplots(1, len(arrays_1))
         x_values = range(self.timesteps)
         for i in range(len(arrays_1)):
-            self.plot(plot=axs[i],title=titles[i],array_1=arrays_1[i],array_2=arrays_2[i])
+            self.plot(plot=axs[i], title=titles[i],
+                      array_1=arrays_1[i], array_2=arrays_2[i])
         fig.suptitle(
             f'Evaluation of Regression Model. Sample size:{self.num_samples}', fontsize=16)
         plt.subplots_adjust(left=0.05, bottom=0.1,

@@ -114,7 +114,7 @@ class FastSample:
             images = self.reverse_transform(batches[:num_samples]).cpu().numpy()
             now = datetime.now()
             timestamp = str(now.strftime("%Y%m%d_%H%M%S"))
-            np.savez(f"./samples/samples_{timestamp}_{len(images)}.npz",images)
+            np.savez(f"./samples/samples_{timestamp}_skip{self.stop_at}_{len(images)}.npz",images)
             print("Sampling complete!")
 
     def sample_plot(self):

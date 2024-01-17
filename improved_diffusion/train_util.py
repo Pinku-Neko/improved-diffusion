@@ -124,7 +124,10 @@ class TrainLoop:
                     )
                 )
 
-        dist_util.sync_params(self.model.parameters())
+        import platform
+        # dont sync if platform is windows
+        if platform.system() != 'Windows':
+            dist_util.sync_params(self.model.parameters()) 
 
     def _load_ema_parameters(self, rate):
         ema_params = copy.deepcopy(self.master_params)

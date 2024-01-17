@@ -20,14 +20,17 @@ def main():
     # calculate the FID using evaluator and 2 dir's
     fid_data = evaluator.FID(image_real_dir,image_gen_dir)
     print(f"FID is {fid_data['fid']}, saving result")
-    evaluator.save_to_json(fid_data)
-    
+    evaluator.save_to_json(fid_data, filename=args.filename)
+    import pdb;pdb.set_trace()
                 
 
 
 def create_argparser():
     defaults = dict(
-        batch_size = 16
+        batch_size = 16,
+        images_real_dir = '',
+        images_gen_dir = '',
+        filename = ''
     )
     parser = argparse.ArgumentParser()
     add_dict_to_argparser(parser, defaults)

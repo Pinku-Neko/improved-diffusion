@@ -1,8 +1,10 @@
 import torch
-from torchvision.models import inception_v3
+from torchvision.models import inception_v3,Inception_V3_Weights
 from torchvision import transforms
 import numpy as np
 import scipy.linalg
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 class CustomDataset(torch.utils.data.Dataset):
     def __init__(self, images, transform=None):
@@ -25,14 +27,15 @@ class ImageEval:
             transform = None,
             eps = None
             ):
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         # Load pre-trained InceptionV3 model
-        self.model = inception_v3(pretrained=True, transform_input=False, aux_logits=False)
+        self.model = inception_v3(weights=Inception_V3_Weights.DEFAULT, transform_input=False, aux_logits=True).to(self.device)
         self.model.eval()
         # Define image transformation
         self.transform = transform if transform is not None else transforms.Compose([
-            transforms.Resize(299),
-            transforms.CenterCrop(299),
             transforms.ToTensor(),
+            transforms.Resize(299,antialias=True),
+            transforms.CenterCrop(299),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # Assuming normalization for images
         ])
         self.batch_size: int = batch_size
@@ -45,9 +48,10 @@ class ImageEval:
         dataset = CustomDataset(images,self.transform)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=min(len(dataset),self.batch_size),shuffle=True)
         all_feats = []
-        with tqdm(total=len(dataloader),desc='Extracting Features') as pbar:
+        with tqdm(total=len(dataset),desc='Extracting Features') as pbar:
             for data in dataloader:
                 with torch.no_grad():
+                    data = data.to(self.device)
                     feat = self.model(data).detach().cpu().numpy()
                 all_feats.append(feat)
                 pbar.update(len(data))
@@ -74,16 +78,25 @@ class ImageEval:
             'fid': fid,
             'mu_real': mean_real,
             'sigma_real': cov_real,
+            'images_real_dir': image_real_dir,
             'mu_generated': mean_gen,
-            'sigma_generated': cov_gen
+            'sigma_generated': cov_gen,
+            'images_generated_dir': image_gen_dir
         }
         return fid_data
     
-    def save_to_json(self, fid_data: dict, indent: int =None):
+    def save_to_json(self, fid_data: dict, indent: int = None, filename: str = None):
         import json
+        # Convert NumPy arrays to lists
+        fid_data_serializable = {
+            key: value.tolist() if isinstance(value, np.ndarray) else value
+            for key, value in fid_data.items()
+        }
         indent = 4 if indent is None else indent
-        with open('fid_data.json', 'w') as file:
-            json.dump(fid_data, file, indent=indent)
+        if filename is None or filename == '':
+            filename = input("Give a name as filename of output")
+        with open(f'{self.filename}.json', 'w') as file:
+            json.dump(fid_data_serializable, file, indent=indent)
 
     def plot_fid(self, list_fid_data: list[dict]):
         import matplotlib.pyplot as plt

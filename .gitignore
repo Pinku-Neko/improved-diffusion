@@ -2,6 +2,8 @@
 __pycache__/
 cifar_train/
 cifar_test/
+fashion_mnist_train/
+fashion_mnist_test/
 plots/
 models/
 samples/

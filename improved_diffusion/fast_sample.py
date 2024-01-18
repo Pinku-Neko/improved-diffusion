@@ -97,7 +97,7 @@ class FastSample:
             return x_next, t-1
 
 
-    def sample_images(self, num_samples):
+    def sample_images(self, num_samples: int, model_name: str):
         from tqdm.auto import tqdm
         from datetime import datetime
         import numpy as np
@@ -114,7 +114,7 @@ class FastSample:
             images = self.reverse_transform(batches[:num_samples]).cpu().numpy()
             now = datetime.now()
             timestamp = str(now.strftime("%Y%m%d_%H%M%S"))
-            np.savez(f"./samples/samples_{timestamp}_skip{self.stop_at}_{len(images)}.npz",images)
+            np.savez(f"./samples/{model_name}_samples_{timestamp}_skip{self.stop_at}_{len(images)}.npz",images)
             print("Sampling complete!")
 
     def sample_plot(self):

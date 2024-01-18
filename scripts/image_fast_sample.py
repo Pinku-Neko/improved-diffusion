@@ -3,7 +3,7 @@ fast sample image using regression
 '''
 import argparse
 
-from improved_diffusion import dist_util, logger
+from improved_diffusion import dist_util
 from improved_diffusion.script_util import (
     model_and_diffusion_defaults,
     create_model_and_diffusion,
@@ -13,7 +13,6 @@ from improved_diffusion.script_util import (
     add_dict_to_argparser
 )
 from improved_diffusion.fast_sample import FastSample
-import torch as th
 
 def main():
     args = create_argparser().parse_args()
@@ -43,7 +42,7 @@ def main():
 
     # test unet
     # Sampler.test_model()
-    Sampler.sample_images(num_samples=args.num_samples)
+    Sampler.sample_images(num_samples=args.num_samples,model_name=args.model_name)
 
     # Sampler.sample_plot()
 

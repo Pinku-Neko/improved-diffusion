@@ -4,6 +4,7 @@ cifar_train/
 cifar_test/
 fashion_mnist_train/
 fashion_mnist_test/
+fid_scores/
 plots/
 models/
 samples/

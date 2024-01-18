@@ -98,8 +98,43 @@ class ImageEval:
         with open(f'{self.filename}.json', 'w') as file:
             json.dump(fid_data_serializable, file, indent=indent)
 
-    def plot_fid(self, list_fid_data: list[dict]):
-        import matplotlib.pyplot as plt
-        #TODO: draw line plot use fids from bad to good
-        pass
+    def plot_fid(self, data_dir: str):
+        from matplotlib import pyplot as plt
+        import json
+        import os
+        # Initialize a dictionary to store data by category
+        data_by_category = {}
+
+        # Loop through files in the directory
+        for filename in os.listdir(data_dir):
+            # Check if the file has the correct prefix and is a JSON file
+            if filename.startswith("fid_") and filename.endswith(".json"):
+                # Extract the numeric part from the filename (e.g., "0.1")
+                parts = filename.split("_")
+                category = parts[1]
+                integer, decimal = parts[2].split(".")[:2]
+                x_value = str(float(integer+'.'+decimal)*100)+'%'
+
+                # Load the JSON file
+                with open(os.path.join(data_dir, filename), 'r') as file:
+                    json_data = json.load(file)
+
+                # Extract the 'key' value from the JSON dictionary
+                y_value = json_data.get('fid')
+
+                # Append values to the category dictionary
+                if category not in data_by_category:
+                    data_by_category[category] = {'x': [], 'y': []}
+                
+                data_by_category[category]['x'].append(x_value)
+                data_by_category[category]['y'].append(y_value)
+
+        for category, data in data_by_category.items():
+            plt.plot(data['x'], data['y'], marker='o', linestyle='-', label=category)
+
+        plt.xlabel('Finish fast sampling at remaining steps')
+        plt.ylabel('FID')
+        plt.title('FID Evaluation on Fast Sampling')
+        plt.legend()
+        plt.show()
 

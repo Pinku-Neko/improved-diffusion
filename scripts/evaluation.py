@@ -17,10 +17,15 @@ def main():
     image_real_dir = args.images_real_dir
     image_gen_dir = args.images_gen_dir
     # calculate the FID using evaluator and 2 dir's
-    # fid_data = evaluator.FID(image_real_dir,image_gen_dir)
-    # print(f"FID is {fid_data['fid']}, saving result")
-    # evaluator.save_to_json(fid_data, filename=args.filename)
-    evaluator.plot_fid(data_dir='fid_scores')
+    match args.job:
+        case 'fid':
+            fid_data = evaluator.FID(image_real_dir,image_gen_dir)
+            print(f"FID is {fid_data['fid']}, saving result")
+            evaluator.save_to_json(fid_data, filename=args.filename)
+        case 'plot':
+            evaluator.plot_fid(data_dir='fid_scores')
+        case _:
+            print("invalid job requested")
                 
 
 
@@ -29,7 +34,8 @@ def create_argparser():
         batch_size = 16,
         images_real_dir = '',
         images_gen_dir = '',
-        filename = ''
+        filename = '',
+        job = ''
     )
     parser = argparse.ArgumentParser()
     add_dict_to_argparser(parser, defaults)

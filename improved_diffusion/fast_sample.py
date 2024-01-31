@@ -1,6 +1,7 @@
 import torch as th
 import torchvision.transforms as transforms
 from torchvision.transforms import Lambda
+import numpy as np
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -27,67 +28,97 @@ class FastSample:
         self.regression=regression.to(self.device)
         self.regression.eval()
         self.timesteps=timesteps
+        assert 0 <= tolerance < 256 and int(tolerance) == tolerance, "invalid value for tolerance"
         self.tolerance=tolerance
         self.batch_size=batch_size
         self.channels=channels
         self.image_size=image_size
-        self.stop_at=stop_at
-
+        self.stop_at=stop_at # at which percentage of total steps fast sampling stops
+        
+        # counters for model evaluation
+        self.init_counters()
+        
         # for images
         self.image_shape = (batch_size,channels,image_size,image_size)
         self.reverse_transform = transforms.Compose([
             Lambda(lambda t: ((t+1)*127.5).clamp(0,255).to(th.uint8)),
             Lambda(lambda t: t.permute(0,2,3,1))
         ])
+    
+    def init_counters(self):
+        """Initialize the counter variables."""
+        # fast sampling
+        self.total_fast_steps = 0 # total number of fast sampling steps in one forward
+        self.total_fast_steps_list = [] # mean and variance
+        self.batch_fast_steps = 0 # total number of batch steps in one forward
+        self.batch_fast_steps_list = [] # mean and variance
+        # normal sampling
+        self.total_normal_steps = 0 # normal sampling
+        self.total_normal_steps_list = [] # mean var
+        self.batch_normal_steps = 0 # normal sampling
+        self.batch_normal_steps_list = []# mean var
+        # time used
+        self.time = 0 # total time used for sampling
+        # repitition
+        # self.total_rep = [[] for _ in range(self.timesteps)] TODO separated reptition
+        self.batch_rep = [[] for _ in range(self.timesteps)]
 
-    # TODO: make it available with batches
     def forward(self, x=None):
+        import time
+        start = time.time()
+        # reset all counters
+        self.total_fast_steps = 0
+        self.batch_fast_steps = 0
+        self.total_normal_steps = 0
+        self.batch_normal_steps = 0
         with th.no_grad():
-            # no clue whether there would be a copy issue
             # if no x given, generate a random one
             if x is None:
                 x = th.randn(size=self.image_shape,device=self.device)
-            # record all repititions
-            self.total_rep = 0
             # init t with last timestep (timesteps-1)
             true_t = th.tensor([self.timesteps-1]*x.shape[0],dtype=th.int32,device=self.device)
-            threshold = self.timesteps*self.stop_at
-            while any(true_t!=0):
-                predict_required = th.logical_and(true_t>threshold,true_t != 0)
-                predict_not_required = th.logical_and(true_t<=threshold,true_t != 0)
+            threshold = self.timesteps * self.stop_at
+            while any(true_t!=0): # if any time step is not 0 
+                predict_required = th.logical_and(true_t>threshold,true_t != 0) # fast sample batch
+                predict_not_required = th.logical_and(true_t<=threshold,true_t != 0) # normal sample batch
+                # fast sample preprocessing
                 fast_x = x[predict_required]
                 fast_t = true_t[predict_required]
+                # normal sample preprocessing
                 normal_x = x[predict_not_required]
                 normal_t = true_t[predict_not_required]
-                if len(fast_t) != 0:
+                if len(fast_t) != 0: # fast sample batch remains
                     x[predict_required],true_t[predict_required] = self.step(fast_x,fast_t)
-                if len(normal_t) != 0:
-                    with th.no_grad():
-                        x[predict_not_required] = self.diffusion.p_sample(self.unet,normal_x,normal_t)['sample']
-                        true_t[predict_not_required] -= 1
+                    self.batch_fast_steps += 1
+                    self.total_fast_steps += len(fast_t)
+                if len(normal_t) != 0: # normal sample batch remains
+                    x[predict_not_required] = self.diffusion.p_sample(self.unet,normal_x,normal_t)['sample']
+                    true_t[predict_not_required] -= 1
+                    self.batch_normal_steps += 1
+                    self.total_normal_steps += len(normal_t)
             # last step, just return p_sample
             last_t = th.zeros(size=(self.image_shape[0],),dtype=th.int32,device=self.device)
+            self.time = time.time()-start
             return self.diffusion.p_sample(self.unet,x,last_t)['sample']
 
     def step(self, x, t):
         with th.no_grad():
-            # print current t
-            # print(f"predict {t}")
             # sample from diffusion
-            # predict the timestep using 
+            # predict the timestep using regression 
             x_next = self.diffusion.p_sample(self.unet,x,t)['sample']
             t_pred = th.round(self.regression(x_next) * self.timesteps).to(dtype=th.int32).squeeze(1)
             # repeat for certain number of times
             repitition = 0
             while repitition<self.tolerance:
                 # if sampled image has lower predict than true t
-                # import pdb;pdb.set_trace()
                 if all(t_pred < t):
                     # use the image and use the predict t as true t
                     return x_next, t_pred
                 # repeat process until too much
                 repitition += 1
-                self.total_rep += 1
+                # bad implementation
+                for i in t:
+                    self.batch_rep[i].append(1)
                 # sample from diffusion
                 # predict the timestep using regression
                 x_next = self.diffusion.p_sample(self.unet,x,t)['sample']
@@ -100,7 +131,7 @@ class FastSample:
     def sample_images(self, num_samples: int, model_name: str):
         from tqdm.auto import tqdm
         from datetime import datetime
-        import numpy as np
+        
         with th.no_grad():
             batches = []
             # just make enough batches
@@ -110,11 +141,33 @@ class FastSample:
                 noise = th.randn(self.image_shape,device=self.device)
                 batch = self.forward(noise)
                 batches.append(batch)
+                # record counters
+                self.total_fast_steps_list.append(self.total_fast_steps)
+                self.batch_fast_steps_list.append(self.batch_fast_steps)
+                self.total_normal_steps_list.append(self.total_normal_steps)
+                self.batch_normal_steps_list.append(self.batch_normal_steps)
+                
             batches = th.concatenate(batches)
             images = self.reverse_transform(batches[:num_samples]).cpu().numpy()
             now = datetime.now()
             timestamp = str(now.strftime("%Y%m%d_%H%M%S"))
-            np.savez(f"./samples/{model_name}_samples_{timestamp}_skip{self.stop_at}_{len(images)}.npz",images)
+            # each result is np array of mean and variance
+            results = [np.array([np.mean(list),np.var(list)]) for list in [
+                self.total_fast_steps_list,
+                self.batch_fast_steps_list,
+                self.total_normal_steps_list,
+                self.batch_normal_steps_list
+            ]]
+            result_rep = mean_variance_nested(self.batch_rep)
+            np.savez(f"./samples/{model_name}_samples_{timestamp}_skip{self.stop_at}_{len(images)}.npz",
+                     arr0=images,
+                     total_fast=results[0],
+                     batch_fast=results[1],
+                     total_normal=results[2],
+                     batch_normal=results[3],
+                     rep=result_rep
+            )
+            import pdb;pdb.set_trace()
             print("Sampling complete!")
 
     def sample_plot(self):
@@ -157,3 +210,16 @@ class FastSample:
             fig.suptitle('comparison')
             plt.show()
 
+def mean_variance_nested(nested_list):
+    """
+    calculate the mean and variance of a nested list and
+    return numpy array of mean and variance. NaN if no value
+    in element array
+    """
+    results = np.full((len(nested_list),2),fill_value=np.nan)
+    for i, list in enumerate(nested_list):
+        # seems default value of empty list nan
+        results[i,0] = np.mean(list)
+        results[i,1] = np.var(list)
+    return results
+    

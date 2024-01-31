@@ -54,7 +54,8 @@ def create_argparser():
         clamp=False,
         batch_size = 16,
         stop_at = 0.8,
-        num_samples = 16
+        num_samples = 16,
+        model_name = 'cifar10'
     )
     defaults.update(model_and_diffusion_defaults())
     defaults.update(regression_defaults())

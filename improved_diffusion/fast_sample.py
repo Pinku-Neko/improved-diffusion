@@ -167,7 +167,6 @@ class FastSample:
                      batch_normal=results[3],
                      rep=result_rep
             )
-            import pdb;pdb.set_trace()
             print("Sampling complete!")
 
     def sample_plot(self):

@@ -95,7 +95,7 @@ class ImageEval:
         indent = 4 if indent is None else indent
         if filename is None or filename == '':
             filename = input("Give a name as filename of output")
-        with open(f'{filename}.json', 'w') as file:
+        with open(f'fid_scores/{filename}.json', 'w') as file:
             json.dump(fid_data_serializable, file, indent=indent)
 
     def plot_fid(self, data_dir: str):

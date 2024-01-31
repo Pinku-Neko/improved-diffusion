@@ -48,14 +48,13 @@ def main():
 
 def create_argparser():
     defaults = dict(
-        data_dir="cifar_test",
+        model_name = 'cifar10',
         regression_path="models/regression/reg_128_L2_best.pt",
         unet_path="models/cifar10_uncond_50M_500K.pt",
         clamp=False,
         batch_size = 16,
         stop_at = 0.8,
         num_samples = 16,
-        model_name = 'cifar10'
     )
     defaults.update(model_and_diffusion_defaults())
     defaults.update(regression_defaults())

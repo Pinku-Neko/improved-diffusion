@@ -73,14 +73,15 @@ class ImageEval:
         mean_gen = np.mean(features_gen, axis=0)
         cov_gen = np.cov(features_gen, rowvar=False)
         # calculate FID
-        fid = np.sum((mean_real - mean_gen) ** 2) + np.trace(cov_real + cov_gen - 2 * scipy.linalg.sqrtm(cov_real.dot(cov_gen)) + self.eps)
+        fid = np.sum((mean_real - mean_gen) ** 2) + np.trace(cov_real + cov_gen - 2 * scipy.linalg.sqrtm(cov_real.dot(cov_gen)))
+        # only fid and dir necessary, others too large to store
         fid_data: dict = {
             'fid': fid,
-            'mu_real': mean_real,
-            'sigma_real': cov_real,
+            # 'mu_real': mean_real,
+            # 'sigma_real': cov_real,
             'images_real_dir': image_real_dir,
-            'mu_generated': mean_gen,
-            'sigma_generated': cov_gen,
+            # 'mu_generated': mean_gen,
+            # 'sigma_generated': cov_gen,
             'images_generated_dir': image_gen_dir
         }
         return fid_data

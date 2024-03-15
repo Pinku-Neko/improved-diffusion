@@ -49,7 +49,7 @@ def main():
 
 def create_argparser():
     defaults = dict(
-        data_dir="cifar_test",
+        model_name = 'cifar10',
         regression_path="models/regression/reg_128_L2_best.pt",
         unet_path="models/cifar10_uncond_50M_500K.pt",
         clamp=False,

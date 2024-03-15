@@ -16,7 +16,8 @@ class FastSample:
             channels = 3,
             image_size = 32,
             timesteps = 4000,
-            stop_at = 0.8
+            cut_off = 0.8,
+            use_ddim=False
             ):
         """
         use 2 models to sample faster
@@ -33,10 +34,13 @@ class FastSample:
         self.batch_size=batch_size
         self.channels=channels
         self.image_size=image_size
-        self.stop_at=stop_at # at which percentage of total steps fast sampling stops
+        self.use_ddim=use_ddim
+        self.cut_off=cut_off # at which percentage of total steps fast sampling stops
         
         # counters for model evaluation
         self.init_counters()
+        # determine samplers
+        self.init_samplers()
         
         # for images
         self.image_shape = (batch_size,channels,image_size,image_size)
@@ -44,6 +48,14 @@ class FastSample:
             Lambda(lambda t: ((t+1)*127.5).clamp(0,255).to(th.uint8)),
             Lambda(lambda t: t.permute(0,2,3,1))
         ])
+    
+    def init_samplers(self):
+        if self.use_ddim:
+            self.sample_loop = self.diffusion.ddim_sample_loop
+            self.sample_fn = self.diffusion.ddim_sample # fn for function
+        else:
+            self.sample_loop = self.diffusion.p_sample_loop
+            self.sample_fn = self.diffusion.p_sample # fn for function
     
     def init_counters(self):
         """Initialize the counter variables."""
@@ -77,7 +89,7 @@ class FastSample:
                 x = th.randn(size=self.image_shape,device=self.device)
             # init t with last timestep (timesteps-1)
             true_t = th.tensor([self.timesteps-1]*x.shape[0],dtype=th.int32,device=self.device)
-            threshold = self.timesteps * self.stop_at
+            threshold = self.timesteps * self.cut_off
             while any(true_t!=0): # if any time step is not 0 
                 predict_required = th.logical_and(true_t>threshold,true_t != 0) # fast sample batch
                 predict_not_required = th.logical_and(true_t<=threshold,true_t != 0) # normal sample batch
@@ -92,20 +104,20 @@ class FastSample:
                     self.batch_fast_steps += 1
                     self.total_fast_steps += len(fast_t)
                 if len(normal_t) != 0: # normal sample batch remains
-                    x[predict_not_required] = self.diffusion.p_sample(self.unet,normal_x,normal_t)['sample']
+                    x[predict_not_required] = self.sample_fn(self.unet,normal_x,normal_t)['sample']
                     true_t[predict_not_required] -= 1
                     self.batch_normal_steps += 1
                     self.total_normal_steps += len(normal_t)
-            # last step, just return p_sample
+            # last step, just return sampled
             last_t = th.zeros(size=(self.image_shape[0],),dtype=th.int32,device=self.device)
             self.time = time.time()-start
-            return self.diffusion.p_sample(self.unet,x,last_t)['sample']
+            return self.sample_fn(self.unet,x,last_t)['sample']
 
     def step(self, x, t):
         with th.no_grad():
             # sample from diffusion
             # predict the timestep using regression 
-            x_next = self.diffusion.p_sample(self.unet,x,t)['sample']
+            x_next = self.sample_fn(self.unet,x,t)['sample']
             t_pred = th.round(self.regression(x_next) * self.timesteps).to(dtype=th.int32).squeeze(1)
             # repeat for certain number of times
             repitition = 0
@@ -121,7 +133,7 @@ class FastSample:
                     self.batch_rep[i].append(1)
                 # sample from diffusion
                 # predict the timestep using regression
-                x_next = self.diffusion.p_sample(self.unet,x,t)['sample']
+                x_next = self.sample_fn(self.unet,x,t)['sample']
                 t_pred = th.round(self.regression(x_next) * self.timesteps).to(dtype=th.int32).squeeze(1)
             # force go down by returning newest x_next
             # one could compare differently generated x_next and return best
@@ -159,8 +171,8 @@ class FastSample:
                 self.batch_normal_steps_list
             ]]
             result_rep = mean_variance_nested(self.batch_rep)
-            np.savez(f"./samples/{model_name}_samples_{timestamp}_skip{self.stop_at}_{len(images)}.npz",
-                     arr0=images,
+            np.savez(f"./samples/{model_name}_samples_{timestamp}_skip{self.cut_off}_{len(images)}.npz",
+                     arr_0=images,
                      total_fast=results[0],
                      batch_fast=results[1],
                      total_normal=results[2],
@@ -192,7 +204,7 @@ class FastSample:
                 fast_sample = fast_sample[0].unsqueeze(0)
             fast_sample_image = self.reverse_transform(fast_sample)[0].cpu().numpy()
             # normal sample
-            normal_sample = self.diffusion.p_sample_loop(
+            normal_sample = sample_loop(
                 model=self.unet,
                 shape=self.image_shape,
                 noise=noise,

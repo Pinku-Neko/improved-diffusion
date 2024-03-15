@@ -37,7 +37,8 @@ def main():
         regression=regression,
         batch_size=args.batch_size,
         timesteps=args.diffusion_steps,
-        stop_at=args.stop_at
+        cut_off=args.cut_off,
+        use_ddim=args.use_ddim
     )
 
     # test unet
@@ -53,9 +54,10 @@ def create_argparser():
         unet_path="models/cifar10_uncond_50M_500K.pt",
         clamp=False,
         batch_size = 16,
-        stop_at = 0.8,
+        cut_off = 0.8,
         num_samples = 16,
-        model_name = 'cifar10'
+        model_name = 'cifar10',
+        use_ddim = False
     )
     defaults.update(model_and_diffusion_defaults())
     defaults.update(regression_defaults())

@@ -212,7 +212,6 @@ class FastSample:
             # * for unpacking (a,b,c) to a,b,c
             noise = th.randn(*self.image_shape,device=self.device)
             # fast sample
-            breakpoint()
             fast_sample = self.forward(noise)
             if self.image_shape[0] > 1:
                 fast_sample = fast_sample[0].unsqueeze(0)

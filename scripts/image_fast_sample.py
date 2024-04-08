@@ -29,20 +29,21 @@ def main():
     regression.load_state_dict(
         dist_util.load_state_dict(args.regression_path, map_location="cpu")['model']
     )
-
+    timesteps = int(args.diffusion_steps if not args.timestep_respacing else args.timestep_respacing)
     print("Sampling...")
     Sampler = FastSample(
         unet=unet,
         diffusion=diffusion,
         regression=regression,
         batch_size=args.batch_size,
-        timesteps=args.diffusion_steps,
+        timesteps=timesteps,
         cut_off=args.cut_off,
+        tolerance=args.tolerance,
         use_ddim=args.use_ddim
     )
 
     # test unet
-    # Sampler.test_model()
+    Sampler.test_model()
     Sampler.sample_images(num_samples=args.num_samples,model_name=args.model_name)
 
     # Sampler.sample_plot()
@@ -55,8 +56,8 @@ def create_argparser():
         clamp=False,
         batch_size = 16,
         cut_off = 0.8,
+        tolerance = 3,
         num_samples = 16,
-        model_name = 'cifar10',
         use_ddim = False
     )
     defaults.update(model_and_diffusion_defaults())

@@ -50,18 +50,30 @@ def main():
 
 def create_argparser():
     defaults = dict(
+        # empty
+    )
+    preset_cifar10 = dict(
         model_name = 'cifar10',
         regression_path="models/regression/reg_128_L2_best.pt",
         unet_path="models/cifar10_uncond_50M_500K.pt",
         clamp=False,
-        batch_size = 16,
+        # args for unet
+        image_size = 32,
+        num_channels = 128,
+        num_res_blocks = 3,
+        learn_sigma = True,
+        # args for diffusion
+        noise_schedule = 'cosine',
+        
         cut_off = 0.8,
         tolerance = 3,
+        batch_size = 16,
         num_samples = 16,
         use_ddim = False
     )
     defaults.update(model_and_diffusion_defaults())
     defaults.update(regression_defaults())
+    defaults.update(preset_cifar10)
     parser = argparse.ArgumentParser()
     add_dict_to_argparser(parser, defaults)
     return parser

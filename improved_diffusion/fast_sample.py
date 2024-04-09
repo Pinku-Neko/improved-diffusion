@@ -29,7 +29,7 @@ class FastSample:
         self.regression=regression.to(self.device)
         self.regression.eval()
         self.timesteps=timesteps
-        assert np.int8(np.abs(tolerance)) == tolerance, "invalid value for tolerance, integer between 0 and 127"
+        assert int(tolerance) == tolerance, "invalid value for tolerance, integer"
         self.tolerance=tolerance
         self.batch_size=batch_size
         self.channels=channels
@@ -58,31 +58,15 @@ class FastSample:
     
     def init_counters(self, num_samples):
         """Initialize the counter variables."""
-        # fast sampling
-        self.total_fast_steps = 0 # total number of fast sampling steps in one forward
-        self.total_fast_steps_list = [] # mean and variance
-        self.batch_fast_steps = 0 # total number of batch steps in one forward
-        self.batch_fast_steps_list = [] # mean and variance
-        # normal sampling
-        self.total_normal_steps = 0 # normal sampling
-        self.total_normal_steps_list = [] # mean var
-        self.batch_normal_steps = 0 # normal sampling
-        self.batch_normal_steps_list = []# mean var
+        from collections import defaultdict
+        self.fast_steps = defaultdict(int)
+        self.normal_steps = defaultdict(int)
         # time used
         self.time = 0 # total time used for sampling
         # repitition
-        # consider every sample has record of repitition, size num_samples * timestep
-        # init as -1, 0 for successful predict
-        self.sample_rep = np.full((num_samples,self.timesteps),self.nan,dtype=np.int8)
+        self.step_rep = defaultdict(list) # only necessary entry is created
 
     def forward(self, x=None):
-        import time
-        start = time.time()
-        # reset all counters
-        self.total_fast_steps = 0
-        self.batch_fast_steps = 0
-        self.total_normal_steps = 0
-        self.batch_normal_steps = 0
         with th.no_grad():
             # if no x given, generate a random one
             if x is None:
@@ -101,16 +85,15 @@ class FastSample:
                 normal_t = true_t[predict_not_required]
                 if len(fast_t) != 0: # fast sample batch remains
                     x[predict_required],true_t[predict_required] = self.step(fast_x,fast_t)
-                    self.batch_fast_steps += 1
-                    self.total_fast_steps += len(fast_t)
+                    for timestep in fast_t:
+                        self.fast_steps[timestep.item()] += 1
                 if len(normal_t) != 0: # normal sample batch remains
                     x[predict_not_required] = self.sample_fn(self.unet,normal_x,normal_t)['sample']
                     true_t[predict_not_required] -= 1
-                    self.batch_normal_steps += 1
-                    self.total_normal_steps += len(normal_t)
+                    for timestep in normal_t:
+                        self.normal_steps[timestep.item()] += 1
             # last step, just return sampled
             last_t = th.zeros(size=(self.image_shape[0],),dtype=th.int32,device=self.device)
-            self.time = time.time()-start
             return self.sample_fn(self.unet,x,last_t)['sample']
 
     def step(self, x, t):
@@ -121,28 +104,32 @@ class FastSample:
             t_pred = th.round(self.regression(x_next) * self.timesteps).to(dtype=th.int32).squeeze(1)
             # repeat for certain number of times
             repitition = 0
-            sample_idx_start = self.current_batch_num*self.batch_size
-            current_sample_idx = np.array(range(sample_idx_start,sample_idx_start+x.shape[0]))
-            self.sample_rep[current_sample_idx,t.cpu().numpy()] = repitition
             while repitition<self.tolerance:
                 # if sampled image has lower predict than true t
-                if all(t_pred < t):
+                predict_success = t_pred < t
+                if all(predict_success):
                     # use the image and use the predict t as true t
+                    for timestep in t:
+                        self.step_rep[timestep.item()].append(repitition)
                     return x_next, t_pred
                 repitition += 1
-                self.sample_rep[current_sample_idx,t.cpu().numpy()] = repitition
                 # sample from diffusion
                 # predict the timestep using regression
-                x_next = self.sample_fn(self.unet,x,t)['sample']
-                t_pred = th.round(self.regression(x_next) * self.timesteps).to(dtype=th.int32).squeeze(1)
+                x_retry = x_next[~predict_success]
+                x_retry = self.sample_fn(self.unet,x_retry,t[~predict_success])['sample']
+                t_pred[~predict_success] = th.round(self.regression(x_retry) * self.timesteps).to(dtype=th.int32).squeeze(1)
             # force go down by returning latest x_next
             # one could compare differently generated x_next and return best
+            for timestep in t:
+                self.step_rep[timestep.item()].append(repitition)
             return x_next, t-1
 
 
     def sample_images(self, num_samples: int, model_name: str):
         from tqdm.auto import tqdm
         from datetime import datetime
+        import time
+        start = time.time()
         
         # counters for model evaluation
         self.init_counters(num_samples=num_samples)
@@ -152,39 +139,27 @@ class FastSample:
             # make just enough batches, also avaiable for counters
             num_batches = int(np.ceil(num_samples / self.batch_size))
             progress_bar = tqdm(range(num_batches))
-            progress_bar.set_description(f"class: {model_name}, cut off at: {self.cut_off}")
+            progress_bar.set_description(f"class: {model_name}, ddim: {self.use_ddim}, cut off at: {self.cut_off}, tolerance: {self.tolerance}")
             for i in progress_bar:
-                self.current_batch_num = i
                 noise = th.randn(self.image_shape,device=self.device)
                 batch = self.forward(noise)
                 batches.append(batch)
-                # record counters
-                self.total_fast_steps_list.append(self.total_fast_steps)
-                self.batch_fast_steps_list.append(self.batch_fast_steps)
-                self.total_normal_steps_list.append(self.total_normal_steps)
-                self.batch_normal_steps_list.append(self.batch_normal_steps)
                 
             batches = th.concatenate(batches)
             images = self.reverse_transform(batches[:num_samples]).cpu().numpy()
+            self.time = time.time()-start
             now = datetime.now()
             timestamp = str(now.strftime("%Y%m%d_%H%M%S"))
-            # each result is np array of mean and variance
-            results = [np.array([np.mean(list),np.var(list)]) for list in [
-                self.total_fast_steps_list,
-                self.batch_fast_steps_list,
-                self.total_normal_steps_list,
-                self.batch_normal_steps_list
-            ]]
-            rep_mean, rep_var = evaluate_2d_array(self.sample_rep)
-            np.savez(f"./samples/{model_name}_samples_{timestamp}_skip{self.cut_off}_{len(images)}.npz",
+            # rep_mean, rep_var = evaluate_nested_list(self.step_rep)
+            dir = "./samples/ddim" if self.use_ddim else "./samples"
+            np.savez(f"{dir}/{model_name}_samples_{timestamp}_cutoff_{self.cut_off}_tol_{self.tolerance}_{len(images)}.npz",
                      arr_0=images,
-                     total_fast=results[0],
-                     batch_fast=results[1],
-                     total_normal=results[2],
-                     batch_normal=results[3],
-                     rep_mean=rep_mean,
-                     rep_var=rep_var,
-                     rep_detail=self.sample_rep
+                     time=self.time,
+                     tolerance=self.tolerance,
+                     cut_off=self.cut_off,
+                     fast_steps=self.fast_steps,
+                     normal_steps=self.normal_steps,
+                     step_rep=self.step_rep
             )
             print("Sampling complete!")
 
@@ -202,12 +177,6 @@ class FastSample:
     def test_model(self):
         import matplotlib.pyplot as plt
         with th.no_grad():
-            # these are used in sample, needs to be defined
-            # dont use as template!
-            self.current_batch_num = 0
-            self.sample_rep = np.zeros((1,self.timesteps))
-            # onlt test 1 image
-            assert self.batch_size == 1, "current batch size is not 1"
             # define common noise
             # * for unpacking (a,b,c) to a,b,c
             noise = th.randn(*self.image_shape,device=self.device)
@@ -235,25 +204,21 @@ class FastSample:
             fig.suptitle('comparison')
             plt.show()
 
-def evaluate_2d_array(array_2d):
+def evaluate_nested_list(nested_list):
     """
     calculate the mean and variance of a 2d array and
     return numpy array of mean and variance. -1 and 0 if no value
     along 2nd dimension
     """
-    breakpoint()
-    y_axis_len = array_2d.shape[1]
-    means = np.full((y_axis_len,),-1)
-    vars = np.full((y_axis_len,),-1)
-    for timestep in range(y_axis_len):
-        valid_array = array_2d[:,timestep][array_2d[:,timestep]!=-1]
-        means[timestep] = np.mean(valid_array) if len(valid_array) != 0 else -1
-        vars[timestep] = np.var(valid_array) if len(valid_array) != 0 else 0
-    # results = np.full((len(array_2d),2),fill_value=np.nan)
-    # for i, list in enumerate(array_2d):
-    #     # seems default value of empty list nan
-    #     results[i,0] = np.mean(list)
-    #     results[i,1] = np.var(list)
-    breakpoint()
-    return means, vars
+    means = {}
+    variances = {}
+    for index, values in nested_list.items():
+        if values:  # Check if the list is not empty
+            values_array = np.array(values)
+            means[index] = np.mean(values_array)
+            variances[index] = np.var(values_array)
+        else:
+            means[index] = None  # Handle case where list is empty
+            variances[index] = None  # Handle case where list is empty
+    return means, variances
     

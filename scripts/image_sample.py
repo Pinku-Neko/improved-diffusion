@@ -36,6 +36,8 @@ def main():
     model.to(dist_util.dev())
     model.eval()
 
+    import time
+    start = time.time()
     logger.log("sampling...")
     all_images = []
     all_labels = []
@@ -69,7 +71,7 @@ def main():
             dist.all_gather(gathered_labels, classes)
             all_labels.extend([labels.cpu().numpy() for labels in gathered_labels])
         logger.log(f"created {len(all_images) * args.batch_size} samples")
-
+    print(time.time()-start)
     arr = np.concatenate(all_images, axis=0)
     arr = arr[: args.num_samples]
     if args.class_cond:

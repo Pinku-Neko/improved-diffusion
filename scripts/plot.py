@@ -10,7 +10,9 @@ def plot(data_dir: str):
         from matplotlib import pyplot as plt
         import os
         import numpy as np
-        files_by_cut_off = []
+        # record what cut offs are available
+        cut_offs = []
+        
         # each category provides an errorbsr plot
         categories_errorbars = ['step_rep']
         dict_err = {}
@@ -29,9 +31,11 @@ def plot(data_dir: str):
             print("File:", file)           # Debug output
             full_path = f'{data_dir}/{file}'
             print("Full path:", full_path)  # Debug output
+            breakpoint()
             with np.load(full_path,allow_pickle=True) as data:
                 dict = {}
                 cut_off = data['cut_off'].item()
+                cut_offs.append(cut_off)
                 for category in categories_errorbars:
                     # use errorbar plot
                     list_by_key = sorted(data[category].item().items())
@@ -47,7 +51,6 @@ def plot(data_dir: str):
                 for category in categories_line:
                     dict = {**dict, category: sorted(data[category].item().items())}
                 dict_line = {**dict_line, cut_off: dict}
-                files_by_cut_off.append((cut_off, dict))
                 
                 dict ={}
                 for category in categories_points:
@@ -56,11 +59,42 @@ def plot(data_dir: str):
         
         for dict in [dict_err, dict_line, dict_points]:
             dict = sorted(dict)
-                    
+        
+        # plot dict error bar
+        for category in categories_errorbars:
+            # ascending cut_off
+            for cut_off in cut_offs:
+                # one error bar plot given cut_off
+                plt.plot()
+            plt.legend()
+            # save
+            plt.savefig()
+        
+        for category in categories_line:
+            # ascending cut_off
+            for cut_off in cut_offs:
+                # one line plot given cut_off
+                plt.plot()
+            plt.legend()
+            # save
+            plt.savefig()
+            
+        
+        for category in categories_points:
+            # ascending cut_off
+            collection = []
+            for cut_off in cut_offs:
+                # one line plot each category
+                collection.append()    
+            plt.plot(collection)
+            plt.legend()
+            # save
+            plt.savefig()
+          
                 
         # To sort ascending, use: sorted(thresholds, key=lambda x: x[0])
         # To sort descending, use: sorted(thresholds, key=lambda x: x[0], reverse=True)
-        sorted_files = sorted(files_by_cut_off, key=lambda x: x[0])
+        sorted_files = sorted(cut_offs, key=lambda x: x[0])
         for cut_off, dict in sorted_files:
             with np.load(file) as data:
                 # Your processing code here

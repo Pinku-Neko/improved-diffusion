@@ -24,6 +24,7 @@ class ImageEval:
     def __init__(
             self,
             batch_size,
+            image_real_dir,
             transform = None,
             eps = None
             ):
@@ -40,6 +41,12 @@ class ImageEval:
         ])
         self.batch_size: int = batch_size
         self.eps = eps if eps is not None else 1e-6
+        # store features of real images
+        assert image_real_dir, "invalid directory of real/target images"
+        # self.image_real_dir = image_real_dir
+        self.images_real = read_images_as_numpy(image_real_dir)
+        self.features_real = self.get_features(self.images_real)
+
     
     def get_features(self,images):
         '''Get features using inception v3 \n
@@ -58,46 +65,27 @@ class ImageEval:
         return np.concatenate(all_feats)
         
 
-    def FID(self,image_real_dir,image_gen_dir)->dict:
+    def FID(self,image_gen_dir)->float:
         """Compute the FID between real and generated images"""
         # 2 images are required to be tensor npz in (num_samples, size, size, channels) with arr_0 as key
-        images_real = np.load(image_real_dir)["arr_0"]
         images_gen = np.load(image_gen_dir)["arr_0"]
-        assert type(images_real) == type(images_gen), "type of images mismatch"
+        assert type(self.images_real) == type(images_gen), "type of images mismatch"
         # get features from both
-        features_real = self.get_features(images_real)
         features_gen = self.get_features(images_gen)
         # calculate mu's and sigma's
-        mean_real = np.mean(features_real, axis=0)
-        cov_real = np.cov(features_real, rowvar=False)
+        mean_real = np.mean(self.features_real, axis=0)
+        cov_real = np.cov(self.features_real, rowvar=False)
         mean_gen = np.mean(features_gen, axis=0)
         cov_gen = np.cov(features_gen, rowvar=False)
         # calculate FID
         fid = np.sum((mean_real - mean_gen) ** 2) + np.trace(cov_real + cov_gen - 2 * scipy.linalg.sqrtm(cov_real.dot(cov_gen)))
-        # only fid and dir necessary, others too large to store
-        fid_data: dict = {
-            'fid': fid,
-            # 'mu_real': mean_real,
-            # 'sigma_real': cov_real,
-            'images_real_dir': image_real_dir,
-            # 'mu_generated': mean_gen,
-            # 'sigma_generated': cov_gen,
-            'images_generated_dir': image_gen_dir
-        }
-        return fid_data
+        return fid.item()
+        
     
-    def save_to_json(self, fid_data: dict, indent: int = None, filename: str = None):
-        import json
-        # Convert NumPy arrays to lists
-        fid_data_serializable = {
-            key: value.tolist() if isinstance(value, np.ndarray) else value
-            for key, value in fid_data.items()
-        }
-        indent = 4 if indent is None else indent
-        if filename is None or filename == '':
-            filename = input("Give a name as filename of output")
-        with open(f'fid_scores/{filename}.json', 'w') as file:
-            json.dump(fid_data_serializable, file, indent=indent)
+    def save_to_self(self, fid: float, image_dir:str)->None:
+        files = np.load(image_dir,allow_pickle=True)
+        updated_files = {**files, 'fid': fid}
+        np.savez(image_dir, **updated_files)
 
     def plot_fid(self, data_dir: str):
         from matplotlib import pyplot as plt
@@ -139,3 +127,13 @@ class ImageEval:
         plt.legend()
         plt.show()
 
+def read_images_as_numpy(image_dir):
+    from PIL import Image
+    from tqdm.auto import tqdm
+    image_paths = [os.path.join(image_dir, img) for img in os.listdir(image_dir)]
+    images = []
+    for path in tqdm(image_paths,desc='Loading Images into numpy array'):
+        image = Image.open(path)
+        image_np = np.array(image)
+        images.append(image_np)
+    return np.array(images)

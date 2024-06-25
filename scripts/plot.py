@@ -10,6 +10,7 @@ def plot(data_dir: str):
         from matplotlib import pyplot as plt
         import os
         import numpy as np
+        from tqdm.auto import tqdm
         # record what cut offs are available
         cut_offs = []
         
@@ -26,12 +27,8 @@ def plot(data_dir: str):
         dict_points = {}
         
         # Loop through files in the directory
-        for file in os.listdir(data_dir):
-            print("Directory:", data_dir)  # Debug output
-            print("File:", file)           # Debug output
+        for file in tqdm(os.listdir(data_dir)):
             full_path = f'{data_dir}/{file}'
-            print("Full path:", full_path)  # Debug output
-            breakpoint()
             with np.load(full_path,allow_pickle=True) as data:
                 dict = {}
                 cut_off = data['cut_off'].item()
@@ -63,13 +60,27 @@ def plot(data_dir: str):
         # plot dict error bar
         for category in categories_errorbars:
             # ascending cut_off
-            for cut_off in cut_offs:
+            sorted_cut_offs = sorted(cut_offs)
+            counter = 1
+            plt.title(category)
+            plt.xlabel('timestep')
+            plt.ylabel(f'{category}')
+            for cut_off in sorted_cut_offs:
+                tuples = dict_err[cut_off][category]
+                # tuples contain (timestep, mean, var)
+                pos = sorted_cut_offs.index(cut_off)
+                offset = -1+2*pos/len(sorted_cut_offs)
+                x = [tuple[0] + offset for tuple in tuples]
+                y = [tuple[1] for tuple in tuples]
+                yerr = [tuple[2]*10 for tuple in tuples]
                 # one error bar plot given cut_off
-                plt.plot()
-            plt.legend()
-            # save
-            plt.savefig()
-        
+                plt.scatter(x=x,y=y,s=yerr,label=cut_off,alpha=0.3)
+                if pos > counter*len(cut_offs)/2 -1 or pos == len(cut_offs)-1:
+                    plt.legend()
+                    plt.savefig(f'test_{counter}.png')
+                    counter += 1
+                    plt.close()
+        breakpoint()
         for category in categories_line:
             # ascending cut_off
             for cut_off in cut_offs:
@@ -91,7 +102,7 @@ def plot(data_dir: str):
             # save
             plt.savefig()
           
-                
+        breakpoint()
         # To sort ascending, use: sorted(thresholds, key=lambda x: x[0])
         # To sort descending, use: sorted(thresholds, key=lambda x: x[0], reverse=True)
         sorted_files = sorted(cut_offs, key=lambda x: x[0])

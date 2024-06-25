@@ -56,7 +56,7 @@ class FastSample:
             self.sample_loop = self.diffusion.p_sample_loop
             self.sample_fn = self.diffusion.p_sample # fn for function
     
-    def init_counters(self, num_samples):
+    def init_counters(self):
         """Initialize the counter variables."""
         from collections import defaultdict
         self.fast_steps = defaultdict(int)
@@ -132,7 +132,7 @@ class FastSample:
         start = time.time()
         
         # counters for model evaluation
-        self.init_counters(num_samples=num_samples)
+        self.init_counters()
         
         with th.no_grad():
             batches = []
@@ -177,6 +177,8 @@ class FastSample:
     def test_model(self):
         import matplotlib.pyplot as plt
         with th.no_grad():
+            # counters for model evaluation
+            self.init_counters()
             # define common noise
             # * for unpacking (a,b,c) to a,b,c
             noise = th.randn(*self.image_shape,device=self.device)

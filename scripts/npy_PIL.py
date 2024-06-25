@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-dfile = 'samples/samples_20240105_151856_skip0.8_5000.npz'
+dfile = 'samples/0315_ddim/samples_16x32x32x3.npz'
+breakpoint()
 images = np.load(dfile)["arr_0"]
 plt.ion()
 plt.figure()

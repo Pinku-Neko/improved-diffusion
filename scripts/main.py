@@ -1,26 +1,18 @@
 import subprocess
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 # List of tuples where each tuple contains the script name and its arguments
 script = "scripts/image_fast_sample.py"
-tolerance = 8
+tolerance = 0
 use_ddim = False
-gpu_num = 1
-standard_args = ["--diffusion_steps", "1000", "--batch_size", "128", "--timestep_respacing", "50", "--num_samples", "50000", "--use_ddim", f"{use_ddim}", "--tolerance", f"{tolerance}"]
-scripts = [(script, standard_args+["--cut_off", "1.0"]), 
-           (script, standard_args+["--cut_off", "0.9"]), 
-           (script, standard_args+["--cut_off", "0.8"]), 
-           (script, standard_args+["--cut_off", "0.7"]), 
-           (script, standard_args+["--cut_off", "0.6"]), 
-           (script, standard_args+["--cut_off", "0.5"]), 
-           (script, standard_args+["--cut_off", "0.4"]), 
-           (script, standard_args+["--cut_off", "0.3"]), 
-           (script, standard_args+["--cut_off", "0.2"]), 
-           (script, standard_args+["--cut_off", "0.1"]), 
-           (script, standard_args+["--cut_off", "0.0"])]
+standard_args = ["--diffusion_steps", "4000", "--batch_size", "100", "--timestep_respacing", "1000", "--num_samples", "50000", "--use_ddim", f"{use_ddim}", "--tolerance", f"{tolerance}"]
 
-# Iterate over the list and run each script with its arguments
-for script, args in scripts:
+# Generate cut_off values from 0 to 1 with 0.05 intervals
+cut_off_values = [round(x * 0.05, 2) for x in range(21)]
+scripts = [(script, standard_args + ["--cut_off", f"{cut_off}"]) for cut_off in cut_off_values]
+
+def run_script(script, args, gpu_num):
     # Construct the command to run the script with its arguments
     command = ["python", script] + args
     # Set CUDA_VISIBLE_DEVICES environment variable
@@ -28,3 +20,15 @@ for script, args in scripts:
     env["CUDA_VISIBLE_DEVICES"] = f"{gpu_num}"
     subprocess.run(command, env=env)
 
+# Using ThreadPoolExecutor to run tasks concurrently
+with ThreadPoolExecutor(max_workers=2) as executor:
+    futures = []
+    for idx, (script, args) in enumerate(scripts):
+        # Select GPU number based on index (0 or 1)
+        gpu_num = idx % 2
+        # Submit the task to the executor
+        futures.append(executor.submit(run_script, script, args, gpu_num))
+
+    # Wait for all tasks to complete
+    for future in futures:
+        future.result()

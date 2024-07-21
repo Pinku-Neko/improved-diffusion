@@ -43,8 +43,8 @@ def main():
     )
 
     # test unet
-    Sampler.test_model()
-    # Sampler.sample_images(num_samples=args.num_samples,model_name=args.model_name)
+    # Sampler.test_model()
+    Sampler.sample_images(num_samples=args.num_samples,model_name=args.model_name)
 
     # Sampler.sample_plot()
 

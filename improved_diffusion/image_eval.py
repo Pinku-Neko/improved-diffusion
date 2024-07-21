@@ -45,6 +45,7 @@ class ImageEval:
         assert image_real_dir, "invalid directory of real/target images"
         # self.image_real_dir = image_real_dir
         self.images_real = read_images_as_numpy(image_real_dir)
+        # self.images_real = np.load("samples/0409/ddim/cifar10_samples_20240410_005523_cutoff_0.3_tol_8_50000.npz")["arr_0"]
         self.features_real = self.get_features(self.images_real)
 
     
@@ -53,7 +54,7 @@ class ImageEval:
         assume images are npz '''
         from tqdm.auto import tqdm
         dataset = CustomDataset(images,self.transform)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=min(len(dataset),self.batch_size),shuffle=True)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=min(len(dataset),self.batch_size),shuffle=False)
         all_feats = []
         with tqdm(total=len(dataset),desc='Extracting Features') as pbar:
             for data in dataloader:

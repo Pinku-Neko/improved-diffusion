@@ -14,16 +14,16 @@ def plot(data_dir: str):
         # record what cut offs are available
         cut_offs = []
         
-        # each category provides an errorbsr plot
-        categories_errorbars = ['step_rep']
-        dict_err = {}
+        # each category provides an errorbar plot
+        # categories_errorbars = ['step_rep']
+        # dict_err = {}
         
-        # each category provides a line plot
-        categories_line = ['fast_steps', 'normal_steps']
+        # bar plot
+        dict_step = ['fast_steps', 'normal_steps']
         dict_line = {}
         
         # each category provides a point of a line plot
-        categories_points = ['time', 'fid']
+        categories_points = ['fid']
         dict_points = {}
         
         # Loop through files in the directory
@@ -33,19 +33,20 @@ def plot(data_dir: str):
                 dict = {}
                 cut_off = data['cut_off'].item()
                 cut_offs.append(cut_off)
-                for category in categories_errorbars:
-                    # use errorbar plot
-                    list_by_key = sorted(data[category].item().items())
-                    result = []
-                    for key, values in list_by_key:
-                        mean = np.mean(values)
-                        var = np.var(values)
-                        result.append((key,mean,var))
-                    dict = {**dict, category: result}
-                dict_err = {**dict_err, cut_off: dict}
+                # for category in categories_errorbars:
+                #     # use errorbar plot
+                #     list_by_key = sorted(data[category].item().items())
+                #     result = []
+                #     breakpoint()
+                #     for key, values in list_by_key:
+                #         mean = np.mean(values)
+                #         var = np.var(values)
+                #         result.append((key,mean,var))
+                #     dict = {**dict, category: result}
+                # dict_err = {**dict_err, cut_off: dict}
                 
                 dict ={}
-                for category in categories_line:
+                for category in dict_step:
                     dict = {**dict, category: sorted(data[category].item().items())}
                 dict_line = {**dict_line, cut_off: dict}
                 
@@ -54,62 +55,85 @@ def plot(data_dir: str):
                     dict = {**dict, category: data[category].item()}
                 dict_points = {**dict_points, cut_off: dict}
         
-        for dict in [dict_err, dict_line, dict_points]:
+        for dict in [dict_line, dict_points]:
             dict = sorted(dict)
         
-        # plot dict error bar
-        for category in categories_errorbars:
-            # ascending cut_off
-            sorted_cut_offs = sorted(cut_offs)
-            counter = 1
-            plt.title(category)
-            plt.xlabel('timestep')
-            plt.ylabel(f'{category}')
-            for cut_off in sorted_cut_offs:
-                tuples = dict_err[cut_off][category]
-                # tuples contain (timestep, mean, var)
-                pos = sorted_cut_offs.index(cut_off)
-                offset = -1+2*pos/len(sorted_cut_offs)
-                x = [tuple[0] + offset for tuple in tuples]
-                y = [tuple[1] for tuple in tuples]
-                yerr = [tuple[2]*10 for tuple in tuples]
-                # one error bar plot given cut_off
-                plt.scatter(x=x,y=y,s=yerr,label=cut_off,alpha=0.3)
-                if pos > counter*len(cut_offs)/2 -1 or pos == len(cut_offs)-1:
-                    plt.legend()
-                    plt.savefig(f'test_{counter}.png')
-                    counter += 1
-                    plt.close()
-        breakpoint()
-        for category in categories_line:
-            # ascending cut_off
-            for cut_off in cut_offs:
-                # one line plot given cut_off
-                plt.plot()
-            plt.legend()
-            # save
-            plt.savefig()
+        cut_offs = sorted(cut_offs)
+        # # plot dict error bar
+        # for category in categories_errorbars:
+        #     # ascending cut_off
+        #     sorted_cut_offs = sorted(cut_offs)
+        #     plt.title(category)
+        #     plt.xlabel('timestep')
+        #     plt.ylabel(f'{category}')
+        #     for cut_off in sorted_cut_offs:
+        #         tuples = dict_err[cut_off][category]
+        #         # tuples contain (timestep, mean, var)
+        #         pos = sorted_cut_offs.index(cut_off)
+        #         offset = -1+2*pos/len(sorted_cut_offs)
+        #         x = [tuple[0] + offset for tuple in tuples]
+        #         y = [tuple[1] for tuple in tuples]
+        #         yerr = [tuple[2]*10 for tuple in tuples]
+        #         # one error bar plot given cut_off
+        #         plt.scatter(x=x,y=y,s=yerr,label=cut_off,alpha=0.3)
+        #         plt.legend()
+        #     plt.savefig(f'{category}.png')
+        #     plt.close()
+        # ascending cut_off
+        normal_steps = []
+        fast_steps = []
+        for cut_off in cut_offs:
+            normal_steps.append(np.sum(dict_line[cut_off]['normal_steps']))
+            fast_steps.append(np.sum(dict_line[cut_off]['fast_steps']))
+        width = 0.035
+        ind = np.array(cut_offs)
+        fig, ax = plt.subplots()
+        bar1 = ax.bar(ind - width/2, normal_steps, width, label='normal_steps')
+        bar2 = ax.bar(ind + width/2, fast_steps, width, label='fast_steps')
+        add_value_labels(ax,bar1)
+        add_value_labels(ax,bar2)
+        ax.legend()
+        ax.set_xticks(ind)
+        ax.set_xlabel('Threshold')
+        ax.set_ylabel('Steps')
+        ax.set_title('Number of steps in Sampling. T=50')
+        # save
+        plt.savefig('test_bar.png')
+        plt.close()
             
         
         for category in categories_points:
             # ascending cut_off
-            collection = []
+            fid = []
             for cut_off in cut_offs:
                 # one line plot each category
-                collection.append()    
-            plt.plot(collection)
-            plt.legend()
-            # save
-            plt.savefig()
-          
+                fid.append(dict_points[cut_off]['fid'])    
+        plt.plot(cut_offs, fid, marker='o', linestyle='-', label=category)
+        ax = plt.gca()
+        ax.set_ylim([0, 2000])
+        for i, label in enumerate(fid):
+            plt.annotate(
+                format_number(label),
+                (cut_offs[i], fid[i]),
+                textcoords="offset points",  # how to position the text
+                xytext=(0, 10),  # distance from text to points (x,y)
+                ha='center'  # horizontal alignment can be left, right or center
+            )
+        plt.xlabel('Finish fast sampling at remaining steps')
+        plt.ylabel('FID')
+        plt.title('FID Evaluation on Fast Sampling')
+        plt.legend()
+        # save
+        plt.savefig('test_fid.png')
         breakpoint()
+          
         # To sort ascending, use: sorted(thresholds, key=lambda x: x[0])
         # To sort descending, use: sorted(thresholds, key=lambda x: x[0], reverse=True)
         sorted_files = sorted(cut_offs, key=lambda x: x[0])
         for cut_off, dict in sorted_files:
             with np.load(file) as data:
                 # Your processing code here
-                print(f"Processing {file} with threshold {threshold}")
+                print(f"Processing {file} with threshold {cut_off}")
                 # Example of accessing another variable in the .npz file
                 # some_array = data['some_array_name']
                 # process(some_array)
@@ -142,6 +166,25 @@ def create_argparser():
     parser = argparse.ArgumentParser()
     add_dict_to_argparser(parser, defaults)
     return parser
+
+def format_number(num):
+    if num >= 1e6:
+        return f'{num / 1e6:.1f}M'
+    elif num >= 1e3:
+        return f'{num / 1e3:.1f}k'
+    else:
+        return str(round(num,1))
+
+# Function to add value labels on the bars
+def add_value_labels(ax,bars):
+    for bar in bars:
+        height = bar.get_height()
+        label = format_number(height)
+        ax.annotate('{}'.format(label),
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, 0),  # 0 points vertical offset
+                    textcoords="offset points",
+                    ha='center', va='bottom')
 
 
 if __name__ == "__main__":
